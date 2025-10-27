@@ -33,3 +33,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/exchange-token/deno.json"
 entrypoint = "./functions/exchange-token/index.ts"
+
+[functions.verify-token]
+enabled = true
+verify_jwt = false
+import_map = "./functions/verify-token/deno.json"
+entrypoint = "./functions/verify-token/index.ts"

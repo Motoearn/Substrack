@@ -1,7 +1,4 @@
 // public/substrack-sdk.js
-// Substrack JavaScript SDK - No Backend Required
-// Version: 2.0.0
-
 (function(window) {
   'use strict';
 
@@ -10,11 +7,9 @@
       this.token = null;
       this.subscriber = null;
       this.initialized = false;
-      // Point to your Supabase functions
-      this.apiBase = 'https://niisdiotuzvydotoaurt.supabase.co/functions/v1';
+      this.apiBase = 'https://substrack.work.gd/functions/v1'; // UPDATED
     }
 
-    // Initialize and check for token in URL or localStorage
     async init() {
       console.log('🚀 Substrack SDK v2.0.0 initialized');
       
@@ -27,13 +22,23 @@
         const success = await this.exchangeSessionForToken(sessionId);
         
         if (success) {
-          // Clean URL (remove session param)
+          // Clean URL ONLY after successful exchange
           const cleanUrl = window.location.pathname + window.location.hash;
           window.history.replaceState({}, document.title, cleanUrl);
         }
       } else {
         // Load from localStorage
         this.loadFromStorage();
+        
+        // Verify token if exists
+        if (this.token) {
+          console.log('🔍 Verifying existing token...');
+          const valid = await this.verifyToken();
+          if (!valid) {
+            console.warn('⚠️ Token invalid, clearing...');
+            this.logout();
+          }
+        }
       }
       
       this.initialized = true;
@@ -123,19 +128,45 @@
       }
     }
 
+    // Verify token with server (checks if subscription still active)
+    async verifyToken() {
+      if (!this.token) {
+        return false;
+      }
+
+      try {
+        const response = await fetch(`${this.apiBase}/verify-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: this.token })
+        });
+
+        if (!response.ok) {
+          return false;
+        }
+
+        const data = await response.json();
+        
+        if (data.valid) {
+          // Update subscriber info from server
+          this.subscriber = data.subscriber;
+          localStorage.setItem('substrack_subscriber', JSON.stringify(this.subscriber));
+          console.log('✅ Token verified successfully');
+          return true;
+        } else {
+          console.warn('⚠️ Token verification failed:', data.error);
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Error verifying token:', error);
+        return false;
+      }
+    }
+
     // Check if user has active subscription
     hasSubscription() {
       if (!this.token || !this.subscriber) {
         return false;
-      }
-      
-      // Check if subscription expired
-      if (this.subscriber.expiresAt) {
-        const expiryDate = new Date(this.subscriber.expiresAt);
-        if (expiryDate < new Date()) {
-          console.warn('⚠️ Subscription expired');
-          return false;
-        }
       }
       
       return this.subscriber.status === 'active';
@@ -208,30 +239,6 @@
             </div>
           </div>
         `;
-      }
-    }
-
-    // Verify token is still valid (optional - call server to check)
-    async verifyToken() {
-      if (!this.token) {
-        return false;
-      }
-
-      try {
-        // Decode token and check expiry
-        const payload = JSON.parse(atob(this.token.split('.')[1]));
-        const exp = payload.exp;
-        
-        if (exp && exp < Date.now() / 1000) {
-          console.warn('⚠️ Token expired');
-          this.logout();
-          return false;
-        }
-        
-        return true;
-      } catch (error) {
-        console.error('❌ Error verifying token:', error);
-        return false;
       }
     }
   }

@@ -1,13 +1,13 @@
-import { Home, FileText, Users, Receipt, Bell, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-
+import { Home, FileText, Users, Receipt, Settings, Mail } from 'lucide-react';
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Plans', href: '/plans', icon: FileText },
   { name: 'Subscribers', href: '/subscribers', icon: Users },
   { name: 'Payments & Invoices', href: '/payments', icon: Receipt },
-  { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Contact Us', href: '/contact', icon: Mail },  // Add this line
+
 ];
 
 export function Sidebar() {

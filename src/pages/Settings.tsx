@@ -1,9 +1,9 @@
-// src/pages/Settings.tsx - FIXED WITH WIDGET SUPPORT
+// src/pages/Settings.tsx - COMPLETE CLEAN VERSION
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Eye, EyeOff, RefreshCw, Check, X, Copy, Upload, Image as ImageIcon, Download } from 'lucide-react';
+import { Eye, EyeOff, RefreshCw, Check, X, Copy, Upload, Image as ImageIcon, ExternalLink } from 'lucide-react';
 
 export function Settings() {
   const { user, merchant, refreshMerchant } = useAuth();
@@ -16,7 +16,7 @@ export function Settings() {
   const [testingStripe, setTestingStripe] = useState(false);
   const [stripeTestResult, setStripeTestResult] = useState<'success' | 'error' | null>(null);
   const [webhookUrlCopied, setWebhookUrlCopied] = useState(false);
-  const [widgetIdCopied, setWidgetIdCopied] = useState(false);
+  const [sdkCodeCopied, setSdkCodeCopied] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -39,9 +39,7 @@ export function Settings() {
   });
 
   const webhookUrl = `${window.location.origin.replace(window.location.hostname, 'niisdiotuzvydotoaurt.supabase.co')}/functions/v1/stripe-webhook`;
-
-  // Get widget_id (use merchant's id as widget_id)
-  const widgetId = merchant?.id || '';
+  const sdkUrl = 'https://substrack.work.gd/substrack-sdk.js';
 
   useEffect(() => {
     if (merchant) {
@@ -184,16 +182,15 @@ export function Settings() {
     }
   };
 
-  const copyWebhookUrl = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    setWebhookUrlCopied(true);
-    setTimeout(() => setWebhookUrlCopied(false), 2000);
-  };
-
-  const copyWidgetId = () => {
-    navigator.clipboard.writeText(widgetId);
-    setWidgetIdCopied(true);
-    setTimeout(() => setWidgetIdCopied(false), 2000);
+  const copyToClipboard = (text: string, type: 'webhook' | 'sdk') => {
+    navigator.clipboard.writeText(text);
+    if (type === 'webhook') {
+      setWebhookUrlCopied(true);
+      setTimeout(() => setWebhookUrlCopied(false), 2000);
+    } else {
+      setSdkCodeCopied(true);
+      setTimeout(() => setSdkCodeCopied(false), 2000);
+    }
   };
 
   const handleStripeSubmit = async (e: React.FormEvent) => {
@@ -263,6 +260,32 @@ export function Settings() {
     }
   };
 
+  const sdkCode = `<!-- Add to your website's <head> or before </body> -->
+<script src="${sdkUrl}"></script>
+
+<script>
+  // Initialize SDK
+  const substrack = new Substrack();
+  substrack.init().then(() => {
+    
+    // Check if user has subscription
+    if (substrack.hasSubscription()) {
+      // Show premium content
+      document.getElementById('premium-content').style.display = 'block';
+      document.getElementById('subscribe-btn').style.display = 'none';
+      
+      // Get subscriber info
+      const user = substrack.getSubscriber();
+      console.log('Plan:', user.plan);
+      console.log('Features:', user.features);
+    } else {
+      // Show subscribe button
+      document.getElementById('premium-content').style.display = 'none';
+      document.getElementById('subscribe-btn').style.display = 'block';
+    }
+  });
+</script>`;
+
   return (
     <DashboardLayout title="Settings">
       <div className="max-w-4xl">
@@ -310,6 +333,7 @@ export function Settings() {
           </div>
 
           <div className="p-6">
+            {/* BUSINESS TAB */}
             {activeTab === 'business' && (
               <form onSubmit={handleBusinessInfoSubmit} className="space-y-6">
                 <div>
@@ -466,6 +490,7 @@ export function Settings() {
               </form>
             )}
 
+            {/* STRIPE TAB */}
             {activeTab === 'stripe' && (
               <form onSubmit={handleStripeSubmit} className="space-y-6">
                 <div>
@@ -581,7 +606,7 @@ export function Settings() {
                           />
                           <button
                             type="button"
-                            onClick={copyWebhookUrl}
+                            onClick={() => copyToClipboard(webhookUrl, 'webhook')}
                             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                           >
                             {webhookUrlCopied ? (
@@ -605,10 +630,12 @@ export function Settings() {
                         </p>
                         <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
                           <li>Copy the webhook URL above</li>
-                          <li>Go to Stripe Dashboard → Webhooks</li>
-                          <li>Click "Add endpoint"</li>
-                          <li>Paste the webhook URL</li>
-                          <li>Select events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted, invoice.payment_succeeded, invoice.payment_failed</li>
+                          <li>Go to Stripe Dashboard → Search Webhooks</li>
+                          <li>Click "Add destination"</li>
+                          <li>Select "Your account"</li>
+                          <li>Select events: checkout.session.completed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, invoice.payment_succeeded, invoice.payment_failed</li>
+                          <li>Click "continue" and Select Webhook endpoint</li>
+                          <li>Enter the webhook URL</li>
                           <li>Copy the "Signing secret" (starts with whsec_)</li>
                           <li>Paste it below</li>
                         </ol>
@@ -699,57 +726,29 @@ export function Settings() {
               </form>
             )}
 
+            {/* WIDGET TAB */}
             {activeTab === 'widget' && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">🚀 Widget Integration</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">Widget Integration</h3>
                   <p className="text-sm text-gray-600 mb-6">
-                    Embed subscription verification with automatic customer login - No backend needed!
+                    Integrate subscription management into your website with our JavaScript SDK
                   </p>
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                    <div className="flex items-center mb-2">
-                      <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <h4 className="font-semibold text-blue-900">Your Widget ID</h4>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 bg-white px-3 py-2 rounded border border-blue-300 font-mono text-sm">
-                        {widgetId || 'Loading...'}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={copyWidgetId}
-                        disabled={!widgetId}
-                        className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm disabled:opacity-50"
-                      >
-                        {widgetIdCopied ? 'Copied!' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-
+                  {/* Redirect URL Configuration */}
                   <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-                    <h4 className="text-md font-semibold text-gray-800 mb-2">Auto-Login After Payment</h4>
-                    <p className="text-sm text-gray-600 mb-4">
-                      After customers subscribe, redirect them to your website with automatic access
-                    </p>
-
                     <form onSubmit={handleRedirectUrlSave} className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Your Website URL
+                          Redirect URL (where customers land after payment)
                         </label>
                         <input
                           type="url"
                           value={redirectUrl}
                           onChange={(e) => setRedirectUrl(e.target.value)}
-                          placeholder="https://yourwebsite.com/welcome"
+                          placeholder="https://yourwebsite.com/dashboard"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Customers redirected here after payment with access token
-                        </p>
                       </div>
 
                       <button
@@ -763,145 +762,41 @@ export function Settings() {
                             Saving...
                           </>
                         ) : (
-                          'Save Redirect URL'
+                          'Save URL'
                         )}
                       </button>
                     </form>
-
-                    <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h5 className="font-semibold text-blue-900 mb-2">📋 How It Works:</h5>
-                      <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
-                        <li>Customer subscribes to your plan</li>
-                        <li>Payment succeeds via Stripe</li>
-                        <li>Redirected to: <code className="bg-blue-100 px-1 rounded text-xs">{redirectUrl || 'your-url'}?substrack_session=xxx</code></li>
-                        <li>SDK auto-exchanges session for token</li>
-                        <li>Customer logged in automatically ✅</li>
-                      </ol>
-                    </div>
                   </div>
 
-                  <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-                    <h4 className="text-md font-semibold text-gray-800 mb-3">📦 SDK Integration</h4>
+                  {/* SDK Integration Code */}
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <h4 className="text-md font-semibold text-gray-800 mb-3">SDK Code</h4>
                     <p className="text-sm text-gray-600 mb-4">
-                      Add this script to your website:
+                      Add this to your website:
                     </p>
                     
-                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm mb-2">
-{`<!-- Add to your website's <head> or before </body> -->
-<script src="${window.location.origin}/substrack-sdk.js"></script>
-
-<script>
-  // Initialize SDK
-  const substrack = new Substrack();
-  substrack.init().then(() => {
-    
-    // Check if user has subscription
-    if (substrack.hasSubscription()) {
-      // Show premium content
-      document.getElementById('premium').style.display = 'block';
-      
-      // Get subscriber info
-      const user = substrack.getSubscriber();
-      console.log('Plan:', user.plan);
-      console.log('Features:', user.features);
-    } else {
-      // Show subscribe button
-      document.getElementById('subscribe-btn').style.display = 'block';
-    }
-  });
-</script>`}
-                    </pre>
-                    
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const code = `<script src="${window.location.origin}/substrack-sdk.js"></script>`;
-                        navigator.clipboard.writeText(code);
-                        alert('SDK code copied!');
-                      }}
-                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
-                    >
-                      <Copy className="w-4 h-4 mr-1" />
-                      Copy SDK code
-                    </button>
-                  </div>
-
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h5 className="font-semibold text-green-900 mb-2">🎯 Download Example</h5>
-                    <p className="text-sm text-green-800 mb-3">
-                      Download a working HTML example to test locally:
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const html = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Substrack Integration Test</title>
-  <style>
-    body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
-    .premium { display: none; background: #d1fae5; padding: 20px; border-radius: 8px; margin: 20px 0; }
-    button { background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
-    button:hover { background: #2563eb; }
-  </style>
-</head>
-<body>
-  <h1>My Premium App 🚀</h1>
-  <div id="substrack-status"></div>
-  
-  <div id="premium" class="premium">
-    <h2>🎉 Welcome, Premium Member!</h2>
-    <p>You have full access to all features.</p>
-    <p>Your exclusive content appears here...</p>
-  </div>
-  
-  <div id="subscribe-section">
-    <h3>Upgrade to Premium</h3>
-    <p>Subscribe now to unlock all features!</p>
-    <!-- Replace PLAN_ID with your actual plan ID from Substrack dashboard -->
-    <a href="${window.location.origin}/subscribe/YOUR_PLAN_ID">
-      <button>Subscribe Now</button>
-    </a>
-  </div>
-
-  <script src="${window.location.origin}/substrack-sdk.js"></script>
-  <script>
-    const substrack = new Substrack();
-    substrack.init().then(() => {
-      // Show widget badge
-      substrack.showWidget('substrack-status');
-      
-      if (substrack.hasSubscription()) {
-        // User has subscription - show premium content
-        document.getElementById('premium').style.display = 'block';
-        document.getElementById('subscribe-section').style.display = 'none';
-        
-        // Get subscriber details
-        const subscriber = substrack.getSubscriber();
-        console.log('Subscriber:', subscriber);
-      } else {
-        // No subscription - show subscribe button
-        document.getElementById('premium').style.display = 'none';
-        document.getElementById('subscribe-section').style.display = 'block';
-      }
-    });
-  </script>
-</body>
-</html>`;
-                        
-                        const blob = new Blob([html], { type: 'text/html' });
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'substrack-test.html';
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                      }}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Download Test HTML
-                    </button>
+                    <div className="relative">
+                      <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
+                        <code>{sdkCode}</code>
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(sdkCode, 'sdk')}
+                        className="absolute top-3 right-3 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded flex items-center gap-1"
+                      >
+                        {sdkCodeCopied ? (
+                          <>
+                            <Check className="w-3 h-3" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            Copy
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

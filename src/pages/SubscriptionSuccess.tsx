@@ -24,9 +24,8 @@ export function SubscriptionSuccess() {
             ✅ What happens next?
           </p>
           <ul className="text-sm text-green-700 text-left space-y-1">
-            <li>• You'll receive a confirmation email shortly</li>
+            <li>• You'll receive a confirmation email shortly with attached invoice</li>
             <li>• Your subscription is active immediately</li>
-            <li>• You can manage your subscription via email links</li>
           </ul>
         </div>
 

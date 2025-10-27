@@ -6,13 +6,13 @@ import { Dashboard } from './pages/Dashboard';
 import { Plans } from './pages/Plans';
 import { Settings } from './pages/Settings';
 import { Payments } from './pages/Payments';
-import { Notifications } from './pages/Notifications';
 import { PaymentSuccess } from './pages/PaymentSuccess';
 import { PaymentCancelled } from './pages/PaymentCancelled';
 import { SubscriptionSuccess } from './pages/SubscriptionSuccess';
 import { SubscriptionCancelled } from './pages/SubscriptionCancelled';
 import { Subscribers } from './pages/Subscribers';
 import { Subscribe } from './pages/Subscribe';
+import { ContactUs } from './pages/ContactUs';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -103,14 +103,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/notifications"
-        element={
-          <ProtectedRoute>
-            <Notifications />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/settings"
         element={
           <ProtectedRoute>
@@ -118,6 +110,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+  path="/contact"
+  element={
+    <ProtectedRoute>
+      <ContactUs />
+    </ProtectedRoute>
+  }
+/>
       {/* Public subscription pages */}
       <Route path="/subscribe/:planId" element={<Subscribe />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />

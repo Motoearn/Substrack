@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from '../lib/auth';
 import { useNavigate } from 'react-router-dom';
+import { NotificationBell } from './NotificationBell';
 
 interface HeaderProps {
   title: string;
@@ -35,49 +36,55 @@ export function Header({ title }: HeaderProps) {
         </button>
         <h1 className="text-2xl font-semibold text-gray-800 ml-4 md:ml-0">{title}</h1>
       </div>
-      <div className="relative">
-        <button
-          onClick={() => setDropdownOpen(!dropdownOpen)}
-          className="flex items-center space-x-2 focus:outline-none"
-        >
-          <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-            {merchant?.logo_url ? (
-              <img 
-                src={merchant.logo_url} 
-                alt={merchant.business_name || 'Business logo'} 
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-gray-600 font-semibold">
-                {merchant && getInitials(merchant.full_name)}
-              </span>
-            )}
-          </div>
-          <div className="hidden md:block text-right">
-            <div className="font-semibold text-sm text-gray-700">{merchant?.full_name}</div>
-            <div className="text-xs text-gray-500">{merchant?.business_name}</div>
-          </div>
-        </button>
-        {dropdownOpen && (
-          <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-20">
-            <button
-              onClick={() => {
-                navigate('/settings');
-                setDropdownOpen(false);
-              }}
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              Settings
-            </button>
-            <div className="border-t border-gray-100"></div>
-            <button
-              onClick={handleSignOut}
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600"
-            >
-              Logout
-            </button>
-          </div>
-        )}
+      <div className="flex items-center space-x-4">
+        {/* Notification Bell */}
+        <NotificationBell />
+        
+        {/* Profile Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center space-x-2 focus:outline-none"
+          >
+            <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+              {merchant?.logo_url ? (
+                <img 
+                  src={merchant.logo_url} 
+                  alt={merchant.business_name || 'Business logo'} 
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-gray-600 font-semibold">
+                  {merchant && getInitials(merchant.full_name)}
+                </span>
+              )}
+            </div>
+            <div className="hidden md:block text-right">
+              <div className="font-semibold text-sm text-gray-700">{merchant?.full_name}</div>
+              <div className="text-xs text-gray-500">{merchant?.business_name}</div>
+            </div>
+          </button>
+          {dropdownOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-20">
+              <button
+                onClick={() => {
+                  navigate('/settings');
+                  setDropdownOpen(false);
+                }}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+              >
+                Settings
+              </button>
+              <div className="border-t border-gray-100"></div>
+              <button
+                onClick={handleSignOut}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600"
+              >
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

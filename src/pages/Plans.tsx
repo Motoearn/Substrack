@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { supabase, SubscriptionPlan } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Check, ExternalLink } from 'lucide-react';
+import { Plus, Check, ExternalLink, PauseCircle } from 'lucide-react';
 import { StripeService } from '../services/stripeService';
 
 export function Plans() {
   const { user, merchant } = useAuth();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -55,60 +54,34 @@ export function Plans() {
         is_active: true,
       };
 
-      if (editingPlan) {
-        // Update existing plan
-        const { error } = await supabase
-          .from('subscription_plans')
-          .update(planData)
-          .eq('id', editingPlan.id);
+      // Create new plan
+      const { data: newPlan, error } = await supabase
+        .from('subscription_plans')
+        .insert(planData)
+        .select()
+        .single();
 
-        if (error) throw error;
+      if (error) throw error;
 
-        // Update in Stripe if keys are configured
-        if (merchant?.stripe_api_key && editingPlan.stripe_product_id) {
-          try {
-            const stripeService = new StripeService(merchant.stripe_api_key);
-            await stripeService.updatePlanInStripe(
-              editingPlan.stripe_product_id,
-              formData.name,
-              formData.description
-            );
-          } catch (stripeError) {
-            console.error('Failed to update plan in Stripe:', stripeError);
-            alert('Plan updated locally, but failed to sync with Stripe. Please check your Stripe keys.');
-          }
-        }
-      } else {
-        // Create new plan
-        const { data: newPlan, error } = await supabase
-          .from('subscription_plans')
-          .insert(planData)
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        // Create in Stripe if keys are configured
-        if (merchant?.stripe_api_key && newPlan) {
-          try {
-            const stripeService = new StripeService(merchant.stripe_api_key);
-            await stripeService.syncPlanToStripe(
-              newPlan.id,
-              formData.name,
-              formData.description,
-              parseFloat(formData.price),
-              'INR',
-              formData.billing_cycle
-            );
-          } catch (stripeError) {
-            console.error('Failed to create plan in Stripe:', stripeError);
-            alert('Plan created locally, but failed to sync with Stripe. Please check your Stripe keys in Settings.');
-          }
+      // Create in Stripe if keys are configured
+      if (merchant?.stripe_api_key && newPlan) {
+        try {
+          const stripeService = new StripeService(merchant.stripe_api_key);
+          await stripeService.syncPlanToStripe(
+            newPlan.id,
+            formData.name,
+            formData.description,
+            parseFloat(formData.price),
+            'INR',
+            formData.billing_cycle
+          );
+        } catch (stripeError) {
+          console.error('Failed to create plan in Stripe:', stripeError);
+          alert('Plan created locally, but failed to sync with Stripe. Please check your Stripe keys in Settings.');
         }
       }
 
       setShowModal(false);
-      setEditingPlan(null);
       resetForm();
       loadPlans();
     } catch (error: any) {
@@ -119,71 +92,39 @@ export function Plans() {
     }
   };
 
-  const handleEdit = (plan: SubscriptionPlan) => {
-    setEditingPlan(plan);
-    setFormData({
-      name: plan.name,
-      description: plan.description || '',
-      price: plan.price.toString(),
-      billing_cycle: plan.billing_cycle,
-      features: plan.features.length > 0 ? plan.features : [''],
-    });
-    setShowModal(true);
-  };
-
-  const handleDelete = async (planId: string) => {
-    if (!confirm('Are you sure you want to delete this plan?')) return;
-
-    const plan = plans.find((p) => p.id === planId);
-
-    try {
-      const { error } = await supabase
-        .from('subscription_plans')
-        .delete()
-        .eq('id', planId);
-
-      if (error) throw error;
-
-      // Archive in Stripe if it exists
-      if (merchant?.stripe_api_key && plan?.stripe_product_id) {
-        try {
-          const stripeService = new StripeService(merchant.stripe_api_key);
-          await stripeService.archivePlanInStripe(plan.stripe_product_id);
-        } catch (stripeError) {
-          console.error('Failed to archive plan in Stripe:', stripeError);
-        }
-      }
-
-      loadPlans();
-    } catch (error: any) {
-      console.error('Error deleting plan:', error);
-      alert('Failed to delete plan: ' + error.message);
-    }
-  };
-
   const toggleActive = async (plan: SubscriptionPlan) => {
+    const newStatus = !plan.is_active;
+    
     const { error } = await supabase
       .from('subscription_plans')
-      .update({ is_active: !plan.is_active })
+      .update({ is_active: newStatus })
       .eq('id', plan.id);
 
     if (error) {
       console.error('Error toggling plan status:', error);
+      alert('Failed to update plan status');
     } else {
       loadPlans();
+      
+      // Show user-friendly message
+      if (newStatus) {
+        alert('✅ Plan activated! New subscribers can now sign up for this plan.');
+      } else {
+        alert('⏸️ Plan paused. New subscriptions are temporarily disabled. Existing subscribers will continue to have access and auto-renew normally.');
+      }
     }
   };
 
   const getPaymentLink = (plan: SubscriptionPlan): string => {
     if (!plan.stripe_price_id) return '#';
-    const baseUrl = window.location.origin;
+    const baseUrl = 'https://substrack.work.gd';
     return `${baseUrl}/subscribe/${plan.id}`;
   };
 
   const copyPaymentLink = (plan: SubscriptionPlan) => {
     const link = getPaymentLink(plan);
     navigator.clipboard.writeText(link);
-    alert('Payment link copied to clipboard!');
+    alert('✅ Payment link copied to clipboard!');
   };
 
   const resetForm = () => {
@@ -212,9 +153,12 @@ export function Plans() {
   };
 
   const copyEmbedCode = () => {
-    const code = `<div id="substrack-embed"></div>\n<script src="https://cdn.substrack.com/embed.js" async></script>`;
+    const merchantId = user?.id || 'YOUR_MERCHANT_ID';
+    const code = `<!-- SubsTrack Subscription Widget -->
+<div id="substrack-widget" data-merchant-id="${merchantId}"></div>
+<script src="https://substrack.work.gd/widget.js" async></script>`;
     navigator.clipboard.writeText(code);
-    alert('Embed code copied to clipboard!');
+    alert('✅ Embed code copied to clipboard!');
   };
 
   return (
@@ -252,12 +196,11 @@ export function Plans() {
         <div>
           <h2 className="text-xl font-semibold text-gray-700">Manage Subscription Plans</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Create, edit, and manage your subscription offerings.
+            Create and manage your subscription offerings. Use the toggle to pause/resume new subscriptions.
           </p>
         </div>
         <button
           onClick={() => {
-            setEditingPlan(null);
             resetForm();
             setShowModal(true);
           }}
@@ -272,30 +215,45 @@ export function Plans() {
         {plans.map((plan) => (
           <div
             key={plan.id}
-            className={`bg-white rounded-xl shadow-sm p-6 flex flex-col justify-between border ${
-              plan.is_active ? 'border-gray-200' : 'border-gray-300 opacity-60'
+            className={`bg-white rounded-xl shadow-sm p-6 flex flex-col justify-between border-2 transition-all ${
+              plan.is_active 
+                ? 'border-blue-200 hover:border-blue-300' 
+                : 'border-orange-200 bg-orange-50/30'
             }`}
           >
             <div>
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-800">{plan.name}</h3>
-                  {plan.stripe_product_id && (
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-gray-800">{plan.name}</h3>
+                    {!plan.is_active && (
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded-full">
+                        <PauseCircle className="w-3 h-3 mr-1" />
+                        Paused
+                      </span>
+                    )}
+                  </div>
+                  {plan.stripe_product_id && plan.is_active && (
                     <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full mt-1">
                       <Check className="w-3 h-3 mr-1" />
-                      Synced with Stripe
+                      Active & Synced
                     </span>
                   )}
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={plan.is_active}
-                    onChange={() => toggleActive(plan)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
+                <div className="flex flex-col items-end">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={plan.is_active}
+                      onChange={() => toggleActive(plan)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                  <span className="text-xs text-gray-500 mt-1">
+                    {plan.is_active ? 'Active' : 'Paused'}
+                  </span>
+                </div>
               </div>
               <p className="text-3xl font-bold text-gray-900">
                 ₹{plan.price}
@@ -313,64 +271,77 @@ export function Plans() {
             </div>
             <div className="border-t pt-4">
               <p className="text-sm text-gray-500 mb-4 font-medium">
-                {plan.subscriber_count} Active Subscribers
+                {plan.subscriber_count || 0} Active Subscribers
               </p>
               
-              {/* Payment Link */}
-              {plan.stripe_price_id && merchant?.stripe_api_key && (
-                <button
-                  onClick={() => copyPaymentLink(plan)}
-                  className="w-full mb-2 bg-green-50 text-green-700 px-4 py-2 rounded-md font-semibold text-sm hover:bg-green-100 flex items-center justify-center"
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Copy Payment Link
-                </button>
+              {/* Show Payment Link or Paused Message */}
+              {plan.is_active ? (
+                <>
+                  {plan.stripe_price_id && merchant?.stripe_api_key && (
+                    <button
+                      onClick={() => copyPaymentLink(plan)}
+                      className="w-full bg-green-50 text-green-700 px-4 py-2 rounded-md font-semibold text-sm hover:bg-green-100 flex items-center justify-center transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Copy Payment Link
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="bg-orange-50 border border-orange-200 rounded-md p-3">
+                  <div className="flex items-start">
+                    <PauseCircle className="w-5 h-5 text-orange-600 mr-2 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-orange-800 mb-1">
+                        Plan Temporarily Paused
+                      </p>
+                      <p className="text-xs text-orange-700">
+                        New subscribers cannot sign up. Existing subscribers continue with normal access and auto-renewal.
+                      </p>
+                      <p className="text-xs text-orange-600 mt-2 font-medium">
+                        Toggle ON to allow new subscriptions
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
-
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleEdit(plan)}
-                  className="flex-1 bg-gray-100 text-gray-700 px-4 py-2 rounded-md font-semibold text-sm hover:bg-gray-200"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(plan.id)}
-                  className="flex-1 bg-red-50 text-red-600 px-4 py-2 rounded-md font-semibold text-sm hover:bg-red-100"
-                >
-                  Delete
-                </button>
-              </div>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-8 bg-white p-6 rounded-xl shadow-sm">
-        <h3 className="font-semibold text-gray-700">Website Integration</h3>
-        <p className="text-sm text-gray-500 mt-1">
-          Copy the code below to embed the subscription plans on your website.
-        </p>
-        <div className="mt-4 bg-gray-900 rounded-lg p-4 text-white font-mono text-sm relative">
+      {plans.length === 0 && (
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+          <div className="text-gray-400 text-5xl mb-4">📋</div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">No plans created yet</h3>
+          <p className="text-gray-500 mb-4">Create your first subscription plan to get started</p>
           <button
-            onClick={copyEmbedCode}
-            className="absolute top-3 right-3 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-sans rounded px-2 py-1 transition-colors"
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="inline-flex items-center bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
           >
-            Copy
+            <Plus className="w-5 h-5 mr-2" />
+            Create Your First Plan
           </button>
-          <pre>
-            <code>{`<div id="substrack-embed"></div>\n<script src="https://cdn.substrack.com/embed.js" async></script>`}</code>
-          </pre>
         </div>
+      )}
+
+      <div className="mt-8 bg-white p-6 rounded-xl shadow-sm">
+        <h3 className="font-semibold text-gray-700 mb-2">Quick Tip</h3>
+        <p className="text-sm text-gray-500">
+          Copy the payment link and attach it to your subscription button. Your customers can start subscribing right away!
+        </p>
       </div>
 
-      {/* Modal for Create/Edit Plan */}
+      {/* Modal for Create Plan */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">
-                {editingPlan ? 'Edit Plan' : 'Create New Plan'}
+                Create New Plan
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -383,7 +354,7 @@ export function Plans() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Basic Tier"
+                    placeholder="e.g., Premium Plan"
                   />
                 </div>
                 <div>
@@ -395,7 +366,7 @@ export function Plans() {
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     rows={2}
-                    placeholder="Ideal for startups and small businesses"
+                    placeholder="Describe what's included in this plan"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -463,7 +434,6 @@ export function Plans() {
                     type="button"
                     onClick={() => {
                       setShowModal(false);
-                      setEditingPlan(null);
                       resetForm();
                     }}
                     className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
@@ -475,11 +445,7 @@ export function Plans() {
                     disabled={loading}
                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {loading
-                      ? 'Saving...'
-                      : editingPlan
-                      ? 'Update Plan'
-                      : 'Create Plan'}
+                    {loading ? 'Creating...' : 'Create Plan'}
                   </button>
                 </div>
               </form>
