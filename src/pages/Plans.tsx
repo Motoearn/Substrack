@@ -5,9 +5,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { Plus, Check, ExternalLink, PauseCircle } from 'lucide-react';
 import { StripeService } from '../services/stripeService';
 
+// Extended type to include active subscriber count
+interface PlanWithActiveCount extends SubscriptionPlan {
+  active_subscriber_count?: number;
+}
+
 export function Plans() {
   const { user, merchant } = useAuth();
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [plans, setPlans] = useState<PlanWithActiveCount[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -25,16 +30,49 @@ export function Plans() {
   }, [user]);
 
   const loadPlans = async () => {
-    const { data, error } = await supabase
-      .from('subscription_plans')
-      .select('*')
-      .eq('merchant_id', user!.id)
-      .order('created_at', { ascending: false });
+    try {
+      // Fetch plans
+      const { data: plansData, error: plansError } = await supabase
+        .from('subscription_plans')
+        .select('*')
+        .eq('merchant_id', user!.id)
+        .order('created_at', { ascending: false });
 
-    if (error) {
+      if (plansError) throw plansError;
+
+      if (!plansData || plansData.length === 0) {
+        setPlans([]);
+        return;
+      }
+
+      // Fetch active subscriber counts for all plans
+      const planIds = plansData.map(plan => plan.id);
+      
+      const { data: subscriberCounts, error: countError } = await supabase
+        .from('subscribers')
+        .select('plan_id')
+        .eq('merchant_id', user!.id)
+        .eq('status', 'active')
+        .in('plan_id', planIds);
+
+      if (countError) throw countError;
+
+      // Count active subscribers per plan
+      const countMap: { [key: string]: number } = {};
+      subscriberCounts?.forEach(sub => {
+        countMap[sub.plan_id] = (countMap[sub.plan_id] || 0) + 1;
+      });
+
+      // Merge counts with plans
+      const plansWithCounts = plansData.map(plan => ({
+        ...plan,
+        active_subscriber_count: countMap[plan.id] || 0
+      }));
+
+      setPlans(plansWithCounts);
+    } catch (error) {
       console.error('Error loading plans:', error);
-    } else {
-      setPlans(data || []);
+      setPlans([]);
     }
   };
 
@@ -92,7 +130,7 @@ export function Plans() {
     }
   };
 
-  const toggleActive = async (plan: SubscriptionPlan) => {
+  const toggleActive = async (plan: PlanWithActiveCount) => {
     const newStatus = !plan.is_active;
     
     const { error } = await supabase
@@ -115,13 +153,13 @@ export function Plans() {
     }
   };
 
-  const getPaymentLink = (plan: SubscriptionPlan): string => {
+  const getPaymentLink = (plan: PlanWithActiveCount): string => {
     if (!plan.stripe_price_id) return '#';
     const baseUrl = 'https://substrack.work.gd';
     return `${baseUrl}/subscribe/${plan.id}`;
   };
 
-  const copyPaymentLink = (plan: SubscriptionPlan) => {
+  const copyPaymentLink = (plan: PlanWithActiveCount) => {
     const link = getPaymentLink(plan);
     navigator.clipboard.writeText(link);
     alert('✅ Payment link copied to clipboard!');
@@ -271,7 +309,7 @@ export function Plans() {
             </div>
             <div className="border-t pt-4">
               <p className="text-sm text-gray-500 mb-4 font-medium">
-                {plan.subscriber_count || 0} Active Subscribers
+                {plan.active_subscriber_count || 0} Active Subscribers
               </p>
               
               {/* Show Payment Link or Paused Message */}
